@@ -14,3 +14,4 @@ Ignore:
   are not checked in
 
   Ignore CLI configuration files
+  New Line
