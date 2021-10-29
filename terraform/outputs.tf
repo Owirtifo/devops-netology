@@ -10,12 +10,24 @@ output "caller_user" {
 output "region" {
   value = data.aws_region.current.name
 }
-# Private IP
+# Private IP 
 output "private_ip" {
-  value = aws_instance.netology.private_ip
+  value = aws_instance.netology[*].private_ip
+  #value = aws_instance.netology.private_ip
 }
+
 # ID Subnet
 output "id_subnet" {
-  value = aws_instance.netology.private_ip
+  value = aws_instance.netology[*].private_ip
 }
+
+# Network interfaces
+#output "network" {
+#  value = aws_network_interface.ni_test[*]
+#}
+
+# Instance
+#output "instance" {
+#  value = aws_instance.netology
+#}
 

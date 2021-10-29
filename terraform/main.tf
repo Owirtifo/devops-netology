@@ -46,7 +46,7 @@ resource "aws_security_group" "sg-test" {
   description = "Test Security Group"
   vpc_id      = aws_vpc.vpc-test.id
 
-  ingress = [
+ ingress = [
     {
       description      = "SSH"
       from_port        = 22
@@ -79,10 +79,18 @@ resource "aws_security_group" "sg-test" {
   }
 }
 
+# Adding Variable with Set IP address
+locals {
+  private_ips = toset(["10.10.1.5", "10.10.1.6"])
+}
+
+
 # Create Network Interface
 resource "aws_network_interface" "ni_test" {
+  for_each = local.private_ips
   subnet_id   = aws_subnet.subnet_test.id
-  private_ips = ["10.10.1.5"]
+  private_ips = [each.key] 
+  #private_ips = ["10.10.1.5"]
   security_groups = [aws_security_group.sg-test.id]
 
   tags = {
@@ -90,31 +98,84 @@ resource "aws_network_interface" "ni_test" {
   }
 }
 
+# Adding the Instance Type dependency on workspace
+locals {
+  netology_instance_type = {
+    stage = "t2.micro"
+    prod = "t3.large"
+  }
+}
+
+# Adding the Count dependency on workspace
+locals {
+  netology_instance_count = {
+    stage = 1
+    prod = 2
+  }
+}
+
+
 # Create Instace
 resource "aws_instance" "netology" {
+  #ami            = "ami-0964546d3da97e3ab"
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t2.micro"
+  instance_type = local.netology_instance_type[terraform.workspace]
+  count = local.netology_instance_count[terraform.workspace]
+  #instance_type = "t2.micro"
+  vpc_security_group_ids = [aws_vpc.vpc-test.default_security_group_id]
+  subnet_id = aws_subnet.subnet_test.id
+  security_groups = [aws_security_group.sg-test.id]
 
-  network_interface {
-    network_interface_id = aws_network_interface.ni_test.id
-    device_index         = 0
-  }
+  #network_interface {
+   # network_interface_id = aws_network_interface.ni_test1.id
+    #device_index         = 0
+  #}
 
   root_block_device {
-          delete_on_termination = false
-          iops                  = 3000
+          delete_on_termination = true
+          #iops                  = 3000
           tags                  = {
               Name = "Test EBS Volume"
 	    }
-          throughput            = 125
-          volume_size           = 15
-          volume_type           = "gp3"
+          #throughput            = 125
+          volume_size           = 8
+          volume_type           = "gp2"
         }
 
   tags = {
-    Name = "Netology"
+    Name = "Netology-${count.index + 1}"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
+
+# Create Instace For_Each
+resource "aws_instance" "netology_for_each" {
+  for_each = aws_network_interface.ni_test
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = local.netology_instance_type[terraform.workspace]
+ 
+  network_interface {
+    network_interface_id = each.value.id
+    device_index         = 0
+   }
+
+  root_block_device {
+          delete_on_termination = true
+          tags                  = {
+              Name = "Test EBS Volume"
+            }
+          volume_size           = 8
+          volume_type           = "gp2"
+        }
+
+  tags = {
+    Name = "Netology-${each.key}"
+  }
+}
+
 
 # Get Account ID, User ID, and ARN in which Terraform is authorized.
 data "aws_caller_identity" "current" {}
@@ -122,3 +183,25 @@ data "aws_caller_identity" "current" {}
 # Get AWS Region
 data "aws_region" "current" {}
 
+terraform {
+  backend "s3" {
+    bucket = "netologybucket"
+    key    = "netology/terraform.tfstate"
+    region = "us-west-2"
+    encrypt        = true
+    dynamodb_table = "terraform-locks"
+    workspace_key_prefix = "workspaces"
+  }
+}
+
+#data "aws_network_interface" "bar" {
+# id = "eni-0d94a7c8ca6cebd5d"
+#}
+
+#data "aws_security_group" "sg_data" {
+#  id = "sg-6340b568"
+#}
+
+#data "aws_instance" "foo" {
+#  instance_id = "i-01caea43f6e888246"
+#}
